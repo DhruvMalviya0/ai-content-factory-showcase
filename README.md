@@ -1,119 +1,103 @@
 # AI Content Factory
 
-**A local-first platform for researching, scripting and clipping short-form video, with a human approving every step that matters.**
+**A local-first platform for researching, scripting and clipping short-form video, with a person approving every step that matters.**
+
+AI Content Factory is a set of connected engines, not a one-click video generator. One pipeline turns research into
+evidence-checked, reviewed scripts. Another turns long footage into reviewed short clips: import, transcription, AI moment
+discovery, quality filtering, FFmpeg rendering and review. A persistent job queue and an optional autonomous mode tie them
+together. It runs on one Windows computer, with no local AI models, no GPU requirement and no paid services.
 
 > **Notice:** This repository contains public-facing product documentation and visual materials only. The application's source code is maintained separately in a private repository.
 
-![status](https://img.shields.io/badge/status-in%20development-5E6AD2?style=flat-square)
-![runs](https://img.shields.io/badge/runs-locally%20on%20Windows-1F2023?style=flat-square)
-![source](https://img.shields.io/badge/source%20code-private-1F2023?style=flat-square)
+| | |
+|---|---|
+| **Status** | Version 0.3.0, under active development; not publicly released |
+| **Platform** | Windows, localhost only |
+| **Evidence date** | Documentation checked against the private repository and a running copy on 2026-11-25 |
+| **Source code** | Private |
 
 ---
 
-## Introduction
-
-AI Content Factory is a local-first, API-first platform for producing YouTube Shorts across multiple channels. It covers two pipelines in one application:
-
-1. **Research to script.** Collect topics, gather source material, extract claims with evidence, and draft scripts that may only use facts that have been checked.
-2. **Footage to clips.** Import long-form footage you have the right to use, transcribe it, discover candidate moments, render clips and review them.
-
-It runs on a Windows computer with no local AI models, no GPU requirement and no paid services. **Nothing is published without human approval.**
-
 ## The problem
 
-Making short-form video at scale is slow and risky. Research is manual, AI-written scripts can state things the sources never said, and finding the best 30 seconds in an hour of footage means scrubbing through all of it. Automating this without losing control, accuracy or respect for source rights is the hard part.
+Short-form video at scale is slow and risky. Research is manual, AI-written scripts can state things the sources never said,
+finding the best 30 seconds in an hour of footage means scrubbing through all of it, and unattended automation raises questions
+of rights, platform terms and cost. The hard part is automating the mechanical work without losing accuracy, control or
+accountability.
 
-## Product objectives
+## The solution
 
-- **Human in the loop.** Approval is required before anything leaves the system.
-- **Evidence-backed content.** Every claim in a script traces back to a retrieved source and a verbatim quote, checked by code, not just by the model.
-- **Local-first.** Data and media stay on the user's computer. Audio or text is sent to an AI provider only with explicit per-item consent.
-- **Zero paid API mode.** Providers are called only when the user declares a free-tier project, and over-quota requests pause rather than charge.
-- **Respect for rights and platform terms.** Rights, acquisition capability and reuse status are tracked separately, and the platform never downloads from services whose terms forbid it.
-- **Resilient by design.** Work survives crashes and restarts, and failures are visible and recoverable.
+- **Evidence-checked content.** Claims carry a source and a verbatim quote that code verifies; only usable facts reach a script.
+- **Moments, not guesses.** Transcripts are analysed for scored, timestamped candidates with the reason for each; the model never
+  writes timestamps.
+- **Local, validated rendering.** Clips are cut with FFmpeg on the user's computer and checked against the plan before they are
+  accepted.
+- **Human approval.** Everything lands in a review queue. Nothing is published, uploaded or sent to an external service without an
+  explicit decision.
+- **Resilient by design.** A persistent queue survives restarts, with retries, pause, cancel and recovery.
 
-## High-level architecture
+## Main capabilities
+
+| Capability | Status |
+|---|---|
+| Channels, niches, research runs, source-quoted claims, versioned script review | Implemented |
+| Campaign records for creator-authorised clipping | Implemented |
+| Footage import and media library (hash, validate, thumbnail, duplicate detection, rights record) | **Implemented, verified live** |
+| Clip rendering with FFmpeg and in-page review | **Implemented, verified live** |
+| Transcription (Groq Whisper) and AI moment discovery | Implemented; verified with test doubles, **no live provider call made** |
+| Autonomous mode: scheduler, source adapters, selection rules, quality filter | Implemented; folder discovery **verified live**; the full automatic run was not run (needs a provider key) |
+| Gemini and Groq provider layer: fallback, quotas, circuit breakers | Implemented; test doubles only |
+| Direct-link and RSS acquisition | Implemented and mock-tested; **not run live** |
+| YouTube | Link validation and metadata only. **No download, by design** |
+| Captions, reframing, export, publishing, other platforms | **Not built** |
+
+## Screenshots
+
+Genuine screenshots from the running application, using synthetic footage and no API keys. The transcript and moment-candidate
+screens display **synthetic sample records** (no AI provider was called); import, rendering, preview and approval are real.
+Provenance and gaps are in [`screenshots/README.md`](screenshots/README.md).
+
+| | |
+|---|---|
+| ![Overview and system health](screenshots/01-overview-system-health.png)<br>**Overview.** Health checks, migrations at head, hardware profile and provider status. | ![Media library](screenshots/03-media-library.png)<br>**Media library.** A real import: thumbnail, duration, resolution, size, status. |
+| ![Import dialog](screenshots/02-import-footage-dialog.png)<br>**Import.** Files come from an import folder; rights are stated explicitly and kept separate from consent. | ![Transcript](screenshots/04-transcript.png)<br>**Transcript** (synthetic sample). Timestamped segments. |
+| ![Moment discovery](screenshots/05-moment-discovery.png)<br>**Moment discovery** (synthetic sample). Score, categories, suggested opening and why each was picked. | ![Rendered clips](screenshots/06-rendered-clips.png)<br>**Clips.** Real FFmpeg renders with review state, size, resolution and sound. |
+| ![Clip review](screenshots/07-clip-review-approved.png)<br>**Clip review.** In-page preview of a real render and an approve, reject or needs-review verdict. | ![Autonomous mode](screenshots/09-autonomous-mode.png)<br>**Autonomous mode.** Scheduler, limits, blockers and a discovered video. |
+| ![Add a source](screenshots/08-autonomous-add-source.png)<br>**Adding a source.** Rights, cloud consent and reuse status are separate; selection rules per source. | ![Provider status](screenshots/10-provider-status.png)<br>**Provider status.** Gemini primary, Groq fallback, then pause; circuit state; zero-paid-API mode. |
+
+## Architecture overview
 
 ```mermaid
-%%{init: {'theme':'base','themeVariables':{'primaryColor':'#0F1011','primaryTextColor':'#F7F8F8','primaryBorderColor':'#5E6AD2','lineColor':'#5E6AD2','secondaryColor':'#1A1B1D','tertiaryColor':'#08090A'}}}%%
 flowchart TB
-    UI[Web dashboard<br/>localhost only] --> API[Backend API]
-    API --> DB[(Local database)]
-    API --> AIQ[AI task queue<br/>pause and resume]
-    API --> MQ[Media job queue<br/>one job at a time]
-    AIQ --> PM[Provider manager<br/>fallback, quotas, circuit breakers]
-    PM --> LLM[Language-model providers]
-    MQ --> FF[Local FFmpeg processing]
-    subgraph Engines
-        R[Research]
-        CV[Claim verification]
-        S[Script]
-        M[Media library]
-        T[Transcription]
-        D[Moment discovery]
-        C[Clip rendering]
-        A[Source acquisition]
-        AU[Autonomy]
-    end
-    API --> Engines
+    B[Browser] --> D[Dashboard<br/>Next.js, localhost only]
+    D -->|same-origin proxy| API[Backend API<br/>FastAPI, localhost only]
+    API --> DB[(SQLite WAL<br/>42 tables, 12 migrations)]
+    API --> AQ[AI task queue]
+    API --> MQ[Media job queue]
+    AQ --> PM[Provider manager<br/>fallback, quotas, circuit breakers]
+    PM --> EXT[Gemini and Groq<br/>optional, official SDKs]
+    MQ --> W[Media worker<br/>one job at a time]
+    W --> FF[FFmpeg and ffprobe]
+    W --> PM
+    AU[Autonomy scheduler] --> API
 ```
 
-More diagrams are in [`architecture/`](architecture/).
+Six detailed diagrams (system, acquisition, processing, job lifecycle, provider fallback, autonomous orchestration) are in
+[`architecture/`](architecture/README.md).
 
-## The engines
+### The engines
 
-| Engine | Role |
+| Engine | Responsibility |
 |---|---|
-| **Provider and quota engine** | A common interface to language-model providers with fallback order, retry rules, circuit breakers, response caching, and persistent daily and per-minute quotas. |
-| **Research engine** | Collects topics from configured feeds, de-duplicates them across channels, fetches article text politely, and pre-scores ideas. |
-| **Claim-verification engine** | Extracts claims with a source and a verbatim quote, then checks them in code. Claims are classified as multi-source match, source supported, human verified, needs review, unverified, AI assumption or rejected. Only usable facts reach a script. |
-| **Script engine** | Generates versioned scripts that cite fact ids, runs deterministic checks, and supports edit, regenerate and approve. Any change supersedes earlier approvals. |
-| **Media library engine** | Imports footage with hashing, duplicate detection and format validation, and records the user's declared rights. |
-| **Transcription engine** | Splits audio and produces timestamped transcripts through a provider, with per-footage consent. |
-| **Moment-discovery engine** | Reads transcripts (text only) and proposes scored, timestamped clip candidates with a title, an opening line and the reason for the pick. |
-| **Clip-rendering engine** | Cuts approved moments locally with FFmpeg, validates the output, and serves previews for review. |
-| **Source-acquisition engine** | A provider contract that decides how a source may be obtained. See the limits below. |
-| **Autonomy engine** | An optional background mode that discovers videos from configured sources, applies selection rules and a local quality check, and queues finished clips for review. |
-| **Campaign management** | Manual records of creator-authorised clipping campaigns and their rules. |
-
-## Media acquisition and processing workflow
-
-```mermaid
-%%{init: {'theme':'base','themeVariables':{'primaryColor':'#0F1011','primaryTextColor':'#F7F8F8','primaryBorderColor':'#5E6AD2','lineColor':'#5E6AD2'}}}%%
-flowchart LR
-    SRC[Footage you are allowed to use] --> IMP[Import<br/>hash, probe, validate]
-    IMP --> LIB[(Media library)]
-    LIB --> TR[Transcription]
-    TR --> MD[Moment discovery]
-    MD --> QF[Quality check]
-    QF --> RN[Clip rendering]
-    RN --> RV[Human review<br/>approve, reject, needs review]
-```
-
-How footage can arrive:
-
-| Route | State |
-|---|---|
-| Files placed in the import folder | Working |
-| Direct video links and sources the user configures in autonomous mode | Implemented; downloads happen only where plain, permitted HTTP access exists |
-| YouTube links | **Metadata only.** Videos are never downloaded. The request waits for a video file the user supplies |
-| Other platforms (for example Twitch, Instagram, TikTok) | **Not built** |
-
-## Transcription and moment discovery
-
-- Audio is cut into pieces and transcribed through a provider, only with the user's per-footage consent, which can be withdrawn at any time.
-- Moment discovery sends the transcript text only (never video or audio) and returns candidates with scores and reasons. Results are not re-analysed unless the user asks.
-
-## Clip generation
-
-Clips are cut locally with FFmpeg into standard H.264 and AAC files, checked after rendering, and kept in the library. Each clip can be previewed in the dashboard and given a verdict (approved, rejected or needs review) that is stored separately from its render status.
-
-## Queue and orchestration architecture
-
-- **Two queues.** An AI task queue for provider calls, and a media job queue for local FFmpeg work.
-- **AI tasks pause instead of failing.** If no provider may serve a task, it is saved with the reason and the earliest resume time, and a background worker resumes it.
-- **Media jobs are supervised.** One job runs at a time, with progress, cancel, retry, timeouts, stall detection, whole-process-tree termination and recovery after a restart.
-- **Observability.** Job transitions are logged, and the dashboard shows queue health, stuck-job suspicions and recent failures by category.
+| Provider and quota | One interface to Gemini and Groq; fallback, retry, quotas, circuit breakers |
+| Research and claim verification | Topic collection, polite fetching, source-quoted claims checked in code |
+| Script | Versioned scripts that cite fact ids, deterministic checks, approval rules |
+| Media library | Import, validation, content-addressed storage, rights record |
+| Transcription | Chunked audio, provider transcription, per-footage consent |
+| Moment discovery | Windowed transcript analysis, local validation, transparent scoring |
+| Clip rendering | Exact re-encoded cuts validated against the plan |
+| Source acquisition | Provider contract and planner; plain-HTTP and local routes |
+| Autonomy | Source discovery, selection, quality filtering, orchestration |
 
 ## Technology stack
 
@@ -122,53 +106,64 @@ Clips are cut locally with FFmpeg into standard H.264 and AAC files, checked aft
 | Backend | Python, FastAPI, SQLAlchemy, Alembic migrations |
 | Database | SQLite in WAL mode |
 | Dashboard | Next.js, React, TypeScript, Tailwind CSS |
-| Media | FFmpeg and FFprobe |
-| AI providers | Google Gemini and Groq through their official SDKs |
+| Media | FFmpeg and ffprobe |
+| AI providers | Google Gemini and Groq through their official SDKs (optional, user's own keys) |
 | Testing | pytest, Vitest, Playwright |
 | Platform | Windows, localhost only |
 
-## Screenshots
+## Engineering highlights
 
-Real dashboard, workflow and processing screenshots will be added once they have been reviewed for personal data. Nothing here is a mock-up presented as the working product.
+- **Two queues for two failure modes**: AI work pauses and resumes around quotas; media work is supervised, recoverable and
+  one-at-a-time.
+- **Invariants enforced by the database**: check constraints and partial unique indexes make half-imported files, duplicate
+  ready content and double renders impossible.
+- **Race-safe transitions**: every queue state change is a conditional update with explicit worker ownership.
+- **Supervised FFmpeg** under a Windows job object, with timeouts, stall detection and identity-checked orphan reaping.
+- **No invented timestamps**: the model returns segment numbers, never times.
+- **Validate the artefact, not the exit code**: rendered clips are probed and compared with the plan before acceptance.
+- **Consent and rights kept separate**, with consent enforced three times in the backend and withdrawable at any time.
+- **Honest about platform rules**: no YouTube downloader exists; discovery moved to the official API after a live
+  `robots.txt` check.
 
-| Screen | Status |
+## Testing and reliability
+
+| Measure | Result |
 |---|---|
-| Overview and system health | _Placeholder, screenshot to be added_ |
-| Research and content ideas | _Placeholder, screenshot to be added_ |
-| Script review | _Placeholder, screenshot to be added_ |
-| Media library | _Placeholder, screenshot to be added_ |
-| Transcript and moments | _Placeholder, screenshot to be added_ |
-| Clip preview and review | _Placeholder, screenshot to be added_ |
-| Autonomous mode | _Placeholder, screenshot to be added_ |
+| Dashboard unit tests (Vitest) | **22 files, 406 tests, all passed** (run 2026-11-25) |
+| Backend suite (pytest) | **1,846 tests: 1,843 passed, 3 skipped, 0 failed** (run 2026-11-25; the skips need symlink privileges or a memory cap) |
+| Backend test functions defined | 1,031 across 46 files |
+| Playwright end-to-end specs | 2 spec files exist; **not run** in this review |
+| Lint and type checks | Configured; **not run** in this review |
+| Live provider calls | **None made** by the project or in this review |
 
-See [`screenshots/`](screenshots/).
+Details, mocking strategy and boundaries: [`TESTING_AND_RELIABILITY.md`](documentation/TESTING_AND_RELIABILITY.md).
 
-## Demonstration
+## Documentation
 
-A walkthrough video will be linked here.
-_Placeholder, link to be added._ See [`demonstrations/`](demonstrations/).
-
-## Current development status
-
-The project is **under active development** and not publicly released.
-
-| Area | State |
+| Document | Contents |
 |---|---|
-| Foundation: local API, database, hardware and FFmpeg detection, backups | Completed |
-| Admin authentication and provider layer | Completed |
-| Research, claim verification and script review | Completed |
-| Campaign records | Completed |
-| Media job queue, footage import and media library | Completed |
-| Transcription | Completed |
-| AI moment discovery | Completed |
-| Clip rendering and clip review | Completed |
-| Security hardening and observability | Completed |
-| Autonomous mode | Implemented; under continued testing, limited to sources with a permitted way to obtain files |
-| Source links (YouTube) | Link validation and metadata only; no download by design |
-| Captions and reframing | Not built |
-| Export and publishing | Not built |
-| Providers for other platforms | Not built |
+| [Product overview](documentation/PRODUCT_OVERVIEW.md) | Vision, problem, users, capabilities, workflow, status |
+| [System architecture](documentation/SYSTEM_ARCHITECTURE.md) | Frontend, backend, engines, database, orchestration, failure handling |
+| [Media acquisition](documentation/MEDIA_ACQUISITION.md) | Exactly what works today, provider abstraction, downloading, import, validation |
+| [Processing pipeline](documentation/PROCESSING_PIPELINE.md) | Ingestion, transcription, moments, quality filter, FFmpeg, storage |
+| [Queue and orchestration](documentation/QUEUE_AND_ORCHESTRATION.md) | Job lifecycle, recovery, autonomous scheduling |
+| [AI provider architecture](documentation/AI_PROVIDER_ARCHITECTURE.md) | Gemini and Groq, fallback, circuit breakers, quotas |
+| [Testing and reliability](documentation/TESTING_AND_RELIABILITY.md) | Strategy, counts, mocking, boundaries |
+| [Engineering decisions](documentation/ENGINEERING_DECISIONS.md) | Decisions, trade-offs, lessons |
+| [Architecture diagrams](architecture/README.md) | Six Mermaid diagrams |
+| [Screenshots](screenshots/README.md) | Provenance and gaps |
+
+## Current implementation status
+
+| Label | Items |
+|---|---|
+| **Verified live** | Import and library, clip rendering and review, folder-source discovery, health and provider-status pages, migrations at head |
+| **Verified by tests** | Provider layer, queue and recovery, import, rendering, security hardening, acquisition planner (backend); dashboard components |
+| **Implemented, not verified end to end** | Transcription and moment discovery against a real provider, research and scripting against real feeds, autonomous end-to-end run, direct-link and RSS downloads, YouTube metadata |
+| **Partially verified** | Autonomous mode: discovery observed live, the automatic acquire-to-clip run not run; some interface wording from earlier development phases is out of date |
+| **Not built** | Captions, reframing, export, publishing, voiceover, other platform providers, a dedicated Jobs page |
 
 ## Private source-code notice
 
-The source code is private and is not published, mirrored or forked in this repository. This repository only holds documentation, diagrams and visual materials.
+The source code is private and is not published, mirrored or forked here. This repository contains only documentation,
+diagrams and genuine screenshots. No license is granted for the material in this repository.
